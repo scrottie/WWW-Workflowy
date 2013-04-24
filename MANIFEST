@@ -1,0 +1,10 @@
+Makefile.PL
+MANIFEST
+t/WWW-Workflowy.t
+lib/WWW/Workflowy.pm
+t
+t/WWW-Workflowy.t
+t/001-utilities.t
+t/002-concurrent-remote-ops.t
+MANIFEST
+manual_test.pl
