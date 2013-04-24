@@ -2,13 +2,10 @@
 use strict;
 use warnings;
 
-# use autobox::Closure::Attributes;
-
 use lib 'lib', '../lib'; #  XXX
 
 use Test::More;
 
-# BEGIN { use_ok('WWW::Workflowy') }; # keeps the import magic from working
 use WWW::Workflowy;
 
 my $wf = WWW::Workflowy->new(
@@ -105,5 +102,4 @@ sleep $wf->polling_interval;  $wf->sync;
 # $wf->fetch;
 
 done_testing;
-
 
