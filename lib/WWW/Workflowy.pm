@@ -12,15 +12,13 @@ use JSON::PP;
 use POSIX 'floor';
 use Carp;
 
-use autobox::Closure::Attributes;  # XXX hacked up local copy that permits lvalue assigns
+# use autobox::Closure::Attributes;  # XXX hacked up local copy that permits lvalue assigns
 
 =head1 NAME
 
 Workflowy - Faked up API interface to the workflowy.com collaborative outlining webapp
 
 =head1 SYNOPSIS
-
-XXX uses a hacked up copy of autobox::Closure::Attributes
 
 B<This module does not use an official Workflowy API!  Consult workflowy.com's Terms of Service before deciding if it is okay to access their servers programmatically!>
 
@@ -135,6 +133,54 @@ Fetches the latest copy of the outline from the L<Workflowy> server, blowing awa
 This happens automatically on C<new>.
 
 =cut
+
+package autobox::Closure::Attributes::Methods;
+
+use base 'autobox';
+use B;
+use PadWalker;
+
+sub AUTOLOAD :lvalue {
+    my $code = shift;
+    (my $method = our $AUTOLOAD) =~ s/.*:://;
+    return if $method eq 'DESTROY';
+
+    # we want the scalar unless the method name already a sigil
+    my $attr = $method  =~ /^[\$\@\%\&\*]/ ? $method : '$' . $method;
+
+    my $closed_over = PadWalker::closed_over($code);
+
+    # is there a method of that name in the package the coderef was created in?
+    # if so, run it.
+    # give methods priority over the variables we close over.
+    # XXX this isn't lvalue friendly, but sdw can't figure out how to make it be and not piss off old perls.
+
+    my $stash = B::svref_2object($code)->STASH->NAME;
+    if( $stash and $stash->can($method) ) {
+        return $stash->can($method)->( $code, @_ );
+    }
+
+    exists $closed_over->{$attr} or Carp::croak "$code does not close over $attr";
+
+    my $ref = ref $closed_over->{$attr};
+
+    if (@_) {
+        return @{ $closed_over->{$attr} } = @_ if $ref eq 'ARRAY';
+        return %{ $closed_over->{$attr} } = @_ if $ref eq 'HASH';
+        return ${ $closed_over->{$attr} } = shift;
+    }
+
+    $ref eq 'HASH' || $ref eq 'ARRAY' ? $closed_over->{$attr} : ${ $closed_over->{$attr} };  # lvalue friendly return
+
+}
+
+#
+#
+#
+
+package WWW::Workflowy;
+
+use autobox CODE => 'autobox::Closure::Attributes::Methods'; # XXX temp since we can't 'use' it because it's inline
 
 sub import {
     my $class = shift;
@@ -747,6 +793,10 @@ it under the same terms as Perl itself, either Perl version 5.8.9 or,
 at your option, any later version of Perl 5 you may have available.
 
 =cut
+
+#
+# pasted in copy of my hacked up autobox::Attribute::Closures
+#
 
 
 
