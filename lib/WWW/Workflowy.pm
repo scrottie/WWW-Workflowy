@@ -12,11 +12,16 @@ use JSON::PP;
 use POSIX 'floor';
 use Carp;
 
+our $VERSION = '0.1';
+
+# XXX need a public find_node()
+# XXX need a get_parent( $node ), and other traversal stuff
+
 # use autobox::Closure::Attributes;  # XXX hacked up local copy that permits lvalue assigns
 
 =head1 NAME
 
-Workflowy - Faked up API interface to the workflowy.com collaborative outlining webapp
+WWW::Workflowy - Faked up API interface to the workflowy.com collaborative outlining webapp
 
 =head1 SYNOPSIS
 
@@ -71,7 +76,8 @@ Each node has this structure:
   }
 
 It may also have a C<'ch'> containing an arrayref of additional nodes.
-Since C<find> recurses for you, you may usually ignore that field.
+To make things interesting, the root node does not have a C<'ch'> of nodes under it.
+Use the C<get_children()> method to avoid dealing with this special case.
 
 The value from the C<id> field is used as the value for C<save_id>, C<node_id>, or C<parent_id>
 in other calls.
@@ -132,9 +138,13 @@ The value for C<< $wf->polling_interval >> may change in response to a request t
 Fetches the latest copy of the outline from the L<Workflowy> server, blowing away any local changes made to it that haven't yet been pushed up.
 This happens automatically on C<new>.
 
+=head2 get_children
+
+Takes a node id.  Returns an arrayref of a node's children if it has children, or false otherwise.
+
 =cut
 
-package autobox::Closure::Attributes::Methods;
+package autobox::Closure::XAttributes::Methods;
 
 use base 'autobox';
 use B;
@@ -180,11 +190,11 @@ sub AUTOLOAD :lvalue {
 
 package WWW::Workflowy;
 
-use autobox CODE => 'autobox::Closure::Attributes::Methods'; # XXX temp since we can't 'use' it because it's inline
+use autobox CODE => 'autobox::Closure::XAttributes::Methods'; # XXX temp since we can't 'use' it because it's inline
 
 sub import {
     my $class = shift;
-    $class->autobox::import(CODE => 'autobox::Closure::Attributes::Methods');
+    $class->autobox::import(CODE => 'autobox::Closure::XAttributes::Methods');
 }
 
 sub new {
@@ -540,7 +550,7 @@ sub new {
 
         $last_transaction_id = $result_json->{results}->[0]->{new_most_recent_operation_transaction_id};
 
-        $polling_interval = $result_json->{results}->[0]->{new_polling_interval_in_ms} / 1000;
+        $polling_interval = ( $result_json->{results}->[0]->{new_polling_interval_in_ms} || 1000 )  / 1000;
         $last_poll_time = time;
 
         #
@@ -563,8 +573,12 @@ sub new {
 
         my $action = shift;
 
+        # important symbols
+
+        $outline or confess "no outline";  # shouldn't happen
+        $shared_projectid or confess "no shared_projectid"; # shouldn't happen
+
         if( $action eq 'edit' ) {
-            $outline or confess "no outline in edit";  # shouldn't happen
             my %args = @_;
             my $save_id = delete $args{save_id} or confess "pass a save_id parameter";
             my $text = delete $args{text} or confess "pass a text parameter";
@@ -582,7 +596,6 @@ sub new {
 
             # $update_outline returns the id of the newly created node for cmd='create'
 
-            $outline or confess "no outline in create"; # shouldn't happen
             my %args = @_;
             my $parent_id = delete $args{parent_id};
             my $text = delete $args{text};
@@ -598,7 +611,6 @@ sub new {
         }
 
         if( $action eq 'delete' ) {
-            $outline or confess "no outline in delete "; # shouldn't happen
             my %args = @_;
             my $node_id = delete $args{node_id} or confess "pass a node_id parameter";
 
@@ -643,6 +655,13 @@ sub find {
     my $cb = shift or confess "pass a callback";
 
     _find( $self->outline, $cb);
+}
+
+sub find_by_id {
+    # external API takes $self
+    my $self = shift;
+    my $id = shift or confess "pass id";
+    _find( $self->outline, sub { $_[0]->{id} eq $id } );
 }
 
 sub _find {
@@ -732,6 +751,12 @@ sub _find_parent {
 
 }
 
+sub get_children {
+    my $self = shift;
+    my $node_id = shift or confess "pass a node id";
+    (undef, my $children) = _find_node( $self->outline, $node_id ) or confess;
+    return $children;
+}
 
 sub _filter_out {
     my $arr = shift or confess;
@@ -743,7 +768,6 @@ sub _filter_out {
         }
     }
 }
-
 
 sub dump {
     my $self = shift;
