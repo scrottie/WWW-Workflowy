@@ -2,9 +2,8 @@ Makefile.PL
 MANIFEST
 t/WWW-Workflowy.t
 lib/WWW/Workflowy.pm
-t
-t/WWW-Workflowy.t
 t/001-utilities.t
 t/002-concurrent-remote-ops.t
+t/003-live-test.t
 MANIFEST
 manual_test.pl
