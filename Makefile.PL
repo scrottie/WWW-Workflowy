@@ -5,7 +5,7 @@ WriteMakefile(
     NAME              => 'WWW::Workflowy',
     VERSION_FROM      => 'lib/WWW/Workflowy.pm',
     PREREQ_PM         => {
-        PadWalker => 0.00001, 
+        PadWalker => 0.01, 
     },
     ABSTRACT_FROM  => 'lib/WWW/Workflowy.pm',
     AUTHOR         => 'Scott Walters <scott@slowass.net>',
