@@ -207,8 +207,8 @@ sub new {
     my $outline;
     my $client_id;
     my $date_joined;
-    my $last_transaction_id;   # transaction ids are much alrger than the lastModified/lm values; eg 106551357
-    my $operations;            # edits we've made but not yet posted
+    my $last_transaction_id;   # transaction ids are much alrger than the lastModified/lm values; eg 106551357; comes from initialMostRecentOperationTransactionId then $result_json->{results}->[0]->{new_most_recent_operation_transaction_id}
+    my $operations = [];       # edits we've made but not yet posted
     my $polling_interval;      # from $outline->{initialPollingIntervalInMs} and then ->{results}->[0]->{new_polling_interval_in_ms}
     my $last_poll_time;
 
@@ -224,7 +224,7 @@ sub new {
     } elsif( $args{outline} ) {
         # testing -- pass in an outline
         $outline = delete $args{outline};
-        $last_transaction_id = $outline->{initialMostRecentOperationTransactionId};
+        $last_transaction_id = $outline->{initialMostRecentOperationTransactionId} or die "no initialMostRecentOperationTransactionId in serialized outline";
         $date_joined = $outline->{dateJoinedTimestampInSeconds}; # XXX probably have to compute clock skew (diff between time() and this value) and use that when computing $client_timestamp
     } else {
         confess "pass guid or url";
@@ -270,7 +270,7 @@ sub new {
         $client_id = $new_clientId;  # and nope, the new_clientId and client_id aren't generally the same; they look something like "2013-04-23 15:24:05.670771"
 
         $outline = decode_json $mainProjectTreeInfo;
-        $last_transaction_id = $outline->{initialMostRecentOperationTransactionId};
+        $last_transaction_id = $outline->{initialMostRecentOperationTransactionId} or die "no initialMostRecentOperationTransactionId in fetch_outline";
         $date_joined = $outline->{dateJoinedTimestampInSeconds}; # XXX probably have to compute clock skew (diff between time() and this value) and use that when computing $client_timestamp
         $polling_interval = $outline->{initialPollingIntervalInMs} / 1000;
         $last_poll_time = time;
@@ -518,6 +518,8 @@ sub new {
         $r->header( 'Content-Type'     => 'application/x-www-form-urlencoded; charset=UTF-8' );
         $r->header( 'Referer'          => $workflowy_url );
 
+        $last_transaction_id or die "no value in last_transaction_id in sync_changes";
+
         my $push_poll_data = [{
             most_recent_operation_transaction_id => $last_transaction_id,
             shared_projectid => $shared_projectid,
@@ -548,9 +550,11 @@ sub new {
         # "new_most_recent_operation_transaction_id": "106843573"
         # warn Data::Dumper::Dumper $result_json;
 
-        $last_transaction_id = $result_json->{results}->[0]->{new_most_recent_operation_transaction_id};
+        $result_json->{results}->[0]->{error} and die "workflowy.com request failed with an error: ``$result_json->{results}->[0]->{error}''; response was: $decoded_content\npush_poll_data is: " . JSON::PP->new->pretty->encode( $push_poll_data );
 
-        $polling_interval = ( $result_json->{results}->[0]->{new_polling_interval_in_ms} || 1000 )  / 1000;
+        $last_transaction_id = $result_json->{results}->[0]->{new_most_recent_operation_transaction_id} or die "no new_most_recent_operation_transaction_id in sync changes\nresponse was: $decoded_content\npush_poll_data was: " . JSON::PP->new->pretty->encode( $push_poll_data );
+
+        $polling_interval = ( $result_json->{results}->[0]->{new_polling_interval_in_ms} || 1000 )  / 1000; # XXX this was probably just undef when we ignored an error before the checking above was added
         $last_poll_time = time;
 
         #
@@ -564,6 +568,10 @@ sub new {
             my $decoded_run_op = decode_json $run_op;
             $run_remote_operations->( $decoded_run_op );
         }
+
+        #
+
+        $operations = [];
 
     };
 
