@@ -12,7 +12,7 @@ use JSON::PP;
 use POSIX 'floor';
 use Carp;
 
-our $VERSION = '0.1';
+our $VERSION = '0.2';
 
 # XXX need a public find_node()
 # XXX need a get_parent( $node ), and other traversal stuff
