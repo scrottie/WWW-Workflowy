@@ -680,7 +680,7 @@ sub _find {
     # temporarily put rootProjectChildren under rootProject so we can recurse through this nicely
 
     local $outline->{rootProject}->{ch} = $outline->{rootProjectChildren};
-    my $fake_root = { lm => 0, nm => undef, id => undef, ch => [ $outline->{rootProject} ], fake => 1, };
+    my $fake_root = { lm => 0, nm => '', id => '0', ch => [ $outline->{rootProject} ], fake => 1, };
 
     return _find_inner( $fake_root, $cb, );
 }
