@@ -224,7 +224,7 @@ sub new {
     } elsif( $args{outline} ) {
         # testing -- pass in an outline
         $outline = delete $args{outline};
-        $last_transaction_id = $outline->{initialMostRecentOperationTransactionId} or die "no initialMostRecentOperationTransactionId in serialized outline";
+        $last_transaction_id = $outline->{initialMostRecentOperationTransactionId} or confess "no initialMostRecentOperationTransactionId in serialized outline";
         $date_joined = $outline->{dateJoinedTimestampInSeconds}; # XXX probably have to compute clock skew (diff between time() and this value) and use that when computing $client_timestamp
     } else {
         confess "pass guid or url";
@@ -257,20 +257,20 @@ sub new {
     
         # contains a line like this:  var mainProjectTreeInfo = { ... JSON ... };
     
-        (my $mainProjectTreeInfo) = grep $_ =~ m/var mainProjectTreeInfo /, split m/\n/, $decoded_content or die "failed to find mainProjectTreeInfo line in response"; 
-        $mainProjectTreeInfo =~ s{^\s*var mainProjectTreeInfo = }{} or die "failed to remove JS from mainProjectTreeInfo line in response";
-        $mainProjectTreeInfo =~ s{;$}{} or die;
+        (my $mainProjectTreeInfo) = grep $_ =~ m/var mainProjectTreeInfo /, split m/\n/, $decoded_content or confess "failed to find mainProjectTreeInfo line in response"; 
+        $mainProjectTreeInfo =~ s{^\s*var mainProjectTreeInfo = }{} or confess "failed to remove JS from mainProjectTreeInfo line in response";
+        $mainProjectTreeInfo =~ s{;$}{} or confess;
     
         # contains a line like this:    var clientId = "2013-02-16 21:34:52.652778";
     
-        (my $new_clientId) = grep $_ =~ m/var clientId /, split m/\n/, $decoded_content or die "failed to find clientId line in response";
-        $new_clientId =~ s{^\s*var clientId = "}{} or die "failed to remove JS from clientId line in response";
+        (my $new_clientId) = grep $_ =~ m/var clientId /, split m/\n/, $decoded_content or confess "failed to find clientId line in response";
+        $new_clientId =~ s{^\s*var clientId = "}{} or confess "failed to remove JS from clientId line in response";
         $new_clientId =~ s{";$}{};
 
         $client_id = $new_clientId;  # and nope, the new_clientId and client_id aren't generally the same; they look something like "2013-04-23 15:24:05.670771"
 
         $outline = decode_json $mainProjectTreeInfo;
-        $last_transaction_id = $outline->{initialMostRecentOperationTransactionId} or die "no initialMostRecentOperationTransactionId in fetch_outline";
+        $last_transaction_id = $outline->{initialMostRecentOperationTransactionId} or confess "no initialMostRecentOperationTransactionId in fetch_outline";
         $date_joined = $outline->{dateJoinedTimestampInSeconds}; # XXX probably have to compute clock skew (diff between time() and this value) and use that when computing $client_timestamp
         $polling_interval = $outline->{initialPollingIntervalInMs} / 1000;
         $last_poll_time = time;
@@ -294,7 +294,7 @@ sub new {
         my %args = @_;
         my $parent_id = $args{parent_id} || $args{parent_node}->{id} or confess;
         my $new_node = $args{new_node} or confess;
-        my $priority = $args{priority};  defined $priority or confess; 
+        my $priority = $args{priority};  defined $priority or confess;
         my( $parent_node, $children ) = _find_node( $outline, $parent_id ) or confess "couldn't find node for $parent_id in edit in create_node";
         if( ! $children ) {
             if( $parent_id eq $shared_projectid ) {
@@ -339,7 +339,7 @@ sub new {
         my %args = @_;
         my $node_id = $args{node_id} or confess;
         my $parent_id = $args{parent_id} or confess;   # new parent
-        my $priority = $args{priority};  defined $priority or confess; 
+        my $priority = $args{priority};  defined $priority or confess;
 
         my $node = _find_node( $outline, $node_id ) or confess "couldn't find node for $node_id in local_move_node";
 
@@ -497,7 +497,7 @@ sub new {
 
             } elsif( $type eq 'delete' ) {
 
-                $local_delete_node->( node_id => $data->{project_id}, );
+                $local_delete_node->( node_id => $data->{projectid}, );
 
             } elsif( $type eq 'move' ) {
 
@@ -518,7 +518,7 @@ sub new {
         $r->header( 'Content-Type'     => 'application/x-www-form-urlencoded; charset=UTF-8' );
         $r->header( 'Referer'          => $workflowy_url );
 
-        $last_transaction_id or die "no value in last_transaction_id in sync_changes";
+        $last_transaction_id or confess "no value in last_transaction_id in sync_changes";
 
         my $push_poll_data = [{
             most_recent_operation_transaction_id => $last_transaction_id,
@@ -552,7 +552,7 @@ sub new {
 
         $result_json->{results}->[0]->{error} and die "workflowy.com request failed with an error: ``$result_json->{results}->[0]->{error}''; response was: $decoded_content\npush_poll_data is: " . JSON::PP->new->pretty->encode( $push_poll_data );
 
-        $last_transaction_id = $result_json->{results}->[0]->{new_most_recent_operation_transaction_id} or die "no new_most_recent_operation_transaction_id in sync changes\nresponse was: $decoded_content\npush_poll_data was: " . JSON::PP->new->pretty->encode( $push_poll_data );
+        $last_transaction_id = $result_json->{results}->[0]->{new_most_recent_operation_transaction_id} or confess "no new_most_recent_operation_transaction_id in sync changes\nresponse was: $decoded_content\npush_poll_data was: " . JSON::PP->new->pretty->encode( $push_poll_data );
 
         $polling_interval = ( $result_json->{results}->[0]->{new_polling_interval_in_ms} || 1000 )  / 1000; # XXX this was probably just undef when we ignored an error before the checking above was added
         $last_poll_time = time;
