@@ -250,7 +250,7 @@ sub new {
     
         my $response = $user_agent->request($http_request);
         if( $response->is_error ) {
-           die $response->error_as_HTML ;
+           confess $response->error_as_HTML ;
         }
     
         my $decoded_content = $response->decoded_content;
@@ -549,6 +549,9 @@ sub new {
 
         # "new_most_recent_operation_transaction_id": "106843573"
         # warn Data::Dumper::Dumper $result_json;
+
+        # warn JSON::PP->new->pretty->encode( $push_poll_data ); # <--- good for debugging
+        # warn JSON::PP->new->pretty->encode( $result_json );
 
         $result_json->{results}->[0]->{error} and die "workflowy.com request failed with an error: ``$result_json->{results}->[0]->{error}''; response was: $decoded_content\npush_poll_data is: " . JSON::PP->new->pretty->encode( $push_poll_data );
 
