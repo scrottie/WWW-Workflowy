@@ -45,7 +45,7 @@ B<This module does not use an official Workflowy API!  Consult workflowy.com's T
         },
     );
 
-    $node = $wf->create( 
+    $node_id = $wf->create( 
         parent_id => 'Jxn637Zp-uA5O-Anw2-A4kq-4zqKx7WuJNBN',
         priority  => 3,    # which position in the list of items under the parent to insert this node
         text      => "Don't forget to shave the yak",
