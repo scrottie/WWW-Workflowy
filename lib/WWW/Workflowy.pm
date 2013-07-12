@@ -167,7 +167,10 @@ sub AUTOLOAD :lvalue {
 
     my $stash = B::svref_2object($code)->STASH->NAME;
     if( $stash and $stash->can($method) ) {
-        return $stash->can($method)->( $code, @_ );
+        # t/003-live-test.t .............. Can't modify non-lvalue subroutine call at lib/WWW/Workflowy.pm line 170. in perl 5.14.2
+        # goto apparently cheats lvalue detection; cheating detection is adequate for our purposes.
+        # return $stash->can($method)->( $code, @_ ); 
+        @_ = ( $code, @_ ); goto &{ $stash->can($method) };
     }
 
     exists $closed_over->{$attr} or Carp::croak "$code does not close over $attr";
