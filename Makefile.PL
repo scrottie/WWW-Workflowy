@@ -8,6 +8,7 @@ WriteMakefile(
         PadWalker => 0.01, 
         LWP       => 0.01,
         autobox   => 0.01,
+        LWP::Protocol::https => 0.01,
     },
     ABSTRACT_FROM  => 'lib/WWW/Workflowy.pm',
     AUTHOR         => 'Scott Walters <scott@slowass.net>',
