@@ -12,7 +12,7 @@ use JSON::PP;
 use POSIX 'floor';
 use Carp;
 
-our $VERSION = '0.3';
+our $VERSION = '0.4';
 
 # XXX need a public get_parent( $node ), and other traversal stuff.  we have a _find_parent() (which uses the recursive find logic).
 # notes in /home/scott/projects/perl/workflowy_notes.txt
