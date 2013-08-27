@@ -12,7 +12,7 @@ use JSON::PP;
 use POSIX 'floor';
 use Carp;
 
-our $VERSION = '0.4';
+our $VERSION = '0.5';
 
 # XXX need a public get_parent( $node ), and other traversal stuff.  we have a _find_parent() (which uses the recursive find logic).
 # notes in /home/scott/projects/perl/workflowy_notes.txt
@@ -249,32 +249,25 @@ sub new {
 
     my $fetch_outline = sub {
 
-        my $http_request = HTTP::Request->new( GET => "http://workflowy.com/get_project_tree_data?shared_projectid=$shared_projectid" );
+        my $http_request = HTTP::Request->new( GET => "http://workflowy.com/get_initialization_data?shared_projectid=$shared_projectid" );
     
         my $response = $user_agent->request($http_request);
         if( $response->is_error ) {
            confess $response->error_as_HTML ;
         }
     
-        my $decoded_content = $response->decoded_content;
-    
-        # contains a line like this:  var mainProjectTreeInfo = { ... JSON ... };
-    
-        (my $mainProjectTreeInfo) = grep $_ =~ m/var mainProjectTreeInfo /, split m/\n/, $decoded_content or confess "failed to find mainProjectTreeInfo line in response"; 
-        $mainProjectTreeInfo =~ s{^\s*var mainProjectTreeInfo = }{} or confess "failed to remove JS from mainProjectTreeInfo line in response";
-        $mainProjectTreeInfo =~ s{;$}{} or confess;
-    
-        # contains a line like this:    var clientId = "2013-02-16 21:34:52.652778";
-    
-        (my $new_clientId) = grep $_ =~ m/var clientId /, split m/\n/, $decoded_content or confess "failed to find clientId line in response";
-        $new_clientId =~ s{^\s*var clientId = "}{} or confess "failed to remove JS from clientId line in response";
-        $new_clientId =~ s{";$}{};
+        my $decoded_content = $response->decoded_content or die "no response content";
 
-        $client_id = $new_clientId;  # and nope, the new_clientId and client_id aren't generally the same; they look something like "2013-04-23 15:24:05.670771"
+        my $response_json = decode_json $decoded_content or die "failed to decode response as JSON";
 
-        $outline = decode_json $mainProjectTreeInfo;
-        $last_transaction_id = $outline->{initialMostRecentOperationTransactionId} or confess "no initialMostRecentOperationTransactionId in fetch_outline";
-        $date_joined = $outline->{dateJoinedTimestampInSeconds}; # XXX probably have to compute clock skew (diff between time() and this value) and use that when computing $client_timestamp
+        $client_id = $response_json->{projectTreeData}->{clientId} or die "couldn't find clientId in project JSON";
+
+        $outline = $response_json->{projectTreeData}->{mainProjectTreeInfo};
+
+        $last_transaction_id = $outline->{initialMostRecentOperationTransactionId} or die "couldn't find initialMostRecentOperationTransactionId in project JSON";
+
+        $date_joined = $outline->{dateJoinedTimestampInSeconds} or die "couldn't find dateJoinedTimestampInSeconds in project JSON"; # XXX probably have to compute clock skew (diff between time() and this value) and use that when computing $client_timestamp
+        $outline->{initialPollingIntervalInMs} or die "couldn't find initialPollingIntervalInMs in project JSON";
         $polling_interval = $outline->{initialPollingIntervalInMs} / 1000;
         $last_poll_time = time;
 
