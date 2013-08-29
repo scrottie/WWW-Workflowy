@@ -1,5 +1,4 @@
-use 5.012000;
-use ExtUtils::MakeMaker;
+use 5.010000;
 
 WriteMakefile(
     NAME              => 'WWW::Workflowy',
