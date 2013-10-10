@@ -652,7 +652,7 @@ sub new {
 
 sub edit { my $self = shift; $self->( 'edit', @_ ); }
 sub create { my $self = shift; $self->( 'create', @_ ); }
-sub delete { my $self = shift; $self->( 'delete', @_ ); }
+sub delete { my $self = shift; my $node_id = ref($_[0]) ? $_[0]->{id} : $_[0]; $self->( 'delete', node_id => $node_id, ); }
 sub sync { my $self = shift; $self->( 'sync', @_ ); }
 sub fetch { my $self = shift; $self->( 'fetch', @_ ); }
 
