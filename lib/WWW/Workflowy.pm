@@ -359,9 +359,13 @@ sub new {
         my $node_id = delete $args{node_id};
         my $text = delete $args{text};
 
-        # for cmd=create
+        # for cmd=create and cmd=move
         my $parent_id = delete $args{parent_id};
         my $priority = delete $args{priority};
+
+        # for cmd=move
+        my $previous_parent_id = delete $args{previous_parent_id};
+        my $previous_priority = delete $args{previous_priority};
 
         confess "unknown args to update_outline: " . join ', ', keys %args if keys %args;
 
@@ -389,6 +393,30 @@ sub new {
             };
 
             $local_edit_node->( node => $node, text => $text );
+
+        } elsif( $cmd eq 'move' ) {
+
+            my $node = _find_node( $outline, $node_id ) or confess "couldn't find node for $node_id in move in update_outline";
+
+            # queue the changes to get pushed up to workflowy
+
+# [{"most_recent_operation_transaction_id":"186341078","operations":[{"type":"move","data":{"projectid":"1b3043b6-236d-dbd0-da7f-22c3cfcd1748","parentid":"0f60f496-5356-9040-72e6-2d3d5f94cd7c","priority":1},"client_timestamp":503732,"undo_data":{"previous_parentid":"0f60f496-5356-9040-72e6-2d3d5f94cd7c","previous_priority":4,"previous_last_modified":503353}}],"shared_projectid":"0af677e2-d205-22c8-bca6-2071a0e11ad7"}]
+
+            push @$operations, {
+                type => 'move',
+                client_timestamp => $client_timestamp,
+                data => {
+                    projectid => $node_id,
+                    parentid  => $parent_id,
+                    priority  => $priority,
+                },
+                undo_data => {
+                    previous_parentid => $previous_parent_id,
+                    previous_priority => $previous_priority,
+                },
+            };
+
+            $local_move_node->( node => $node, node_id => $node_id, parent_id => $parent_id, priority => $priority, );
 
         } elsif( $cmd eq 'create' ) {
 
@@ -599,6 +627,27 @@ sub new {
             return 1;
         }
 
+# [{"most_recent_operation_transaction_id":"186341078","operations":[{"type":"move","data":{"projectid":"1b3043b6-236d-dbd0-da7f-22c3cfcd1748","parentid":"0f60f496-5356-9040-72e6-2d3d5f94cd7c","priority":1},"client_timestamp":503732,"undo_data":{"previous_parentid":"0f60f496-5356-9040-72e6-2d3d5f94cd7c","previous_priority":4,"previous_last_modified":503353}}],"shared_projectid":"0af677e2-d205-22c8-bca6-2071a0e11ad7"}]
+
+        if( $action eq 'move' ) {
+
+            my %args = @_;
+            my $node_id = delete $args{node_id} or confess "pass a node_id parameter";
+            my ( $parent_node, $node, $previous_priority, $siblings ) = _find_parent($outline, $node_id ) or confess "could not find node ``$node_id'' in ->move()";
+            my $parent_id = delete $args{parent_id} || $parent_node->{id};   # useful if the user only wants to update the priority
+            my $priority = delete $args{priority} || 0;  # useful if the user only wants to change the parent and is okay with it going to the head of the list
+
+            return $update_outline->(
+                cmd                     => 'move',
+                node_id                 => $node_id,
+                parent_id               => $parent_id,                 # for cmd=create
+                priority                => $priority,                  # for cmd=create
+                previous_parent_id      => $parent_node->{id},
+                previous_priority       => $previous_priority,
+            );
+
+        }
+
         if( $action eq 'create' ) {
 
             # $update_outline returns the id of the newly created node for cmd='create'
@@ -651,6 +700,7 @@ sub new {
 }
 
 sub edit { my $self = shift; $self->( 'edit', @_ ); }
+sub move { my $self = shift; $self->( 'move', @_ ); }
 sub create { my $self = shift; $self->( 'create', @_ ); }
 sub delete { my $self = shift; my $node_id = ref($_[0]) ? $_[0]->{id} : $_[0]; $self->( 'delete', node_id => $node_id, ); }
 sub sync { my $self = shift; $self->( 'sync', @_ ); }
