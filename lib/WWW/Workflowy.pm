@@ -12,7 +12,7 @@ use JSON::PP;
 use POSIX 'floor';
 use Carp;
 
-our $VERSION = '0.5';
+our $VERSION = '0.6';
 
 # XXX need a public get_parent( $node ), and other traversal stuff.  we have a _find_parent() (which uses the recursive find logic).
 # notes in /home/scott/projects/perl/workflowy_notes.txt
@@ -30,8 +30,10 @@ B<This module does not use an official Workflowy API!  Consult workflowy.com's T
     use WWW::Workflowy;
 
     my $wf = WWW::Workflowy->new( 
+        # username => '',    # optional:  login credentials for private workflowies
+        # password => '',
         url => 'https://workflowy.com/shared/b141ebc1-4c8d-b31a-e3e8-b9c6c633ca25/',
-        # or else:  guid => 'b141ebc1-4c8d-b31a-e3e8-b9c6c633ca25',
+        # or instead of url:  guid => 'b141ebc1-4c8d-b31a-e3e8-b9c6c633ca25',
     );
 
     $node = $wf->dump;
@@ -57,7 +59,7 @@ B<This module does not use an official Workflowy API!  Consult workflowy.com's T
         text      => "Think of an idea for a color for the bikeshed",
     );
 
-    $wf->delete( node_id => $node->{id} );
+    $wf->delete( $node->{id} );
 
     sleep $wf->polling_interval;  $wf->sync;
 
@@ -83,6 +85,8 @@ The value from the C<id> field is used as the value for C<save_id>, C<node_id>, 
 in other calls.
 
 =head2 new
+
+Takes an optional C<username> and C<password> to access Workflowies that aren't shared.
 
 Takes C<url> resembling C<https://workflowy.com/shared/b141ebc1-4c8d-b31a-e3e8-b9c6c633ca25/> or a L<Workflowy> C<guid> such as C<b141ebc1-4c8d-b31a-e3e8-b9c6c633ca25>.
 
@@ -217,9 +221,13 @@ sub new {
 
     #
 
+    my $share_id;              # stands in temporarily for shared_projectid for newer style URLs that look like https://workflowy.com/s/123abcdeABCDE
+
     if( $args{guid} and ! $args{url} ) {
         # https://workflowy.com/shared/b141ebc1-4c8d-b31a-e3e8-b9c6c633ca25/
         $args{url} = "http://workflowy.com/shared/$args{guid}/";
+    } elsif( $args{url} and $args{url} =~ m{workflowy.com/s/\w+$} ) {
+        ($share_id) = $args{url} =~ m{workflowy.com/s/(\w+)$};
     } elsif( ! $args{guid} and $args{url} ) {
         ($args{guid}) = $args{url} =~ m{/shared/(.*?)/\w*$} or confess "workflowy url doesn't match pattern of ``.*/shared/.*/''";
     } elsif( $args{guid} and $args{url} ) {
@@ -238,6 +246,11 @@ sub new {
 
     #
 
+    my $username = delete $args{username};
+    my $password = delete $args{password};
+
+    #
+
     confess "unknown args to new(): " . join ', ', keys %args if keys %args;
 
     #
@@ -245,11 +258,53 @@ sub new {
     my $user_agent = LWP::UserAgent->new(agent => "Mozilla/5.0 (Windows NT 5.1; rv:5.0.1) Gecko/20100101 Firefox/5.0.1");
     $user_agent->cookie_jar or $user_agent->cookie_jar( { } );
 
+    # login
+
+    if( $username and $password )  {
+
+        my $r = HTTP::Request->new( GET => "https://workflowy.com/" );
+        my $response = $user_agent->request($r);
+        # warn "cookie jar: " . $user_agent->cookie_jar->as_string();
+
+        $r = HTTP::Request->new( POST => "https://workflowy.com/accounts/login" );
+        $r->header( 'Content-Type'     => 'application/x-www-form-urlencoded; charset=UTF-8' );
+        $user_agent->cookie_jar->add_cookie_header( $r );
+        my $post = '';
+        $post .= 'next=&username=' . _escape($username) . '&password=' . _escape($password);
+        $r->content( $post );
+        $response = $user_agent->request($r);
+        if( $response->is_error ) {
+           confess "error: " . $response->error_as_HTML;
+           return;
+        }
+        # warn $response->as_string();
+        # warn "cookie jar: " . $user_agent->cookie_jar->as_string();
+        if( $response->code == 301 or $response->code == 302 ) {
+            my $location = $response->header('Location') or die;
+            # warn "location: $location";
+            $r = HTTP::Request->new( POST => $location );
+            $r->header( 'Content-Type'     => 'application/x-www-form-urlencoded; charset=UTF-8' );
+            $r->content( $post );
+            $user_agent->cookie_jar->add_cookie_header( $r );
+            # warn $r->as_string();
+            $response = $user_agent->request($r);
+            # warn $response->as_string();
+            # warn "cookie jar: " . $user_agent->cookie_jar->as_string();
+        }
+    };
+
     #
 
     my $fetch_outline = sub {
 
-        my $http_request = HTTP::Request->new( GET => "http://workflowy.com/get_initialization_data?shared_projectid=$shared_projectid" );
+        my $http_request;
+        if( $shared_projectid) {
+            $http_request = HTTP::Request->new( GET => "http://workflowy.com/get_initialization_data?shared_projectid=$shared_projectid" );
+        } else {
+            $http_request = HTTP::Request->new( GET => "http://workflowy.com/get_initialization_data?share_id=$share_id&client_version=14" );
+        }
+        $user_agent->cookie_jar->add_cookie_header( $http_request );
+        # warn $http_request->as_string;
     
         my $response = $user_agent->request($http_request);
         if( $response->is_error ) {
@@ -259,6 +314,8 @@ sub new {
         my $decoded_content = $response->decoded_content or die "no response content";
 
         my $response_json = decode_json $decoded_content or die "failed to decode response as JSON";
+
+        $shared_projectid ||= $response_json->{projectTreeData}->{mainProjectTreeInfo}->{rootProject}->{id};  # happens with new style /s/123abcdefg style URLs that we don't know the shared_projectid until we etch it by the share_id
 
         $client_id = $response_json->{projectTreeData}->{clientId} or die "couldn't find clientId in project JSON";
 
@@ -537,6 +594,7 @@ sub new {
     my $sync_changes = sub {
 
         my $r = HTTP::Request->new( POST => "https://workflowy.com/push_and_poll" );
+        $user_agent->cookie_jar->add_cookie_header( $r );
 
         $r->header( 'X-Requested-With' => 'XMLHttpRequest' );
         $r->header( 'Content-Type'     => 'application/x-www-form-urlencoded; charset=UTF-8' );
